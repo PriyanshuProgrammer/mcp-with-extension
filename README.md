@@ -1,5 +1,9 @@
 # # Email Summarizer MCP Server
 
+#Demo
+
+[Demo](https://github.com/user-attachments/assets/ce672649-44e5-486a-a580-7cf0abe708e5)
+
 A powerful Model Context Protocol (MCP) server that transforms email data into beautiful, AI-generated summary cards using Google Gemini.
 
 ## Features
