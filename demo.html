@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP UI Server Client Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 8px 4px;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background: #005999;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .log {
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            padding: 16px;
+            border-radius: 4px;
+            margin: 16px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .status {
+            padding: 8px 16px;
+            border-radius: 4px;
+            margin: 8px 0;
+            font-weight: bold;
+        }
+        
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .iframe-container {
+            margin-top: 20px;
+            border: 2px solid #007acc;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .iframe-container iframe {
+            width: 100%;
+            height: 400px;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 MCP UI Server Client Demo</h1>
+        <p>This demo shows how to interact with your MCP UI Server using fetch API.</p>
+        
+        <div id="status" class="status disconnected">
+            Status: Disconnected
+        </div>
+        
+        <div class="controls">
+            <button id="initBtn" onclick="initializeSession()">1. Initialize Session</button>
+            <button id="listBtn" onclick="listTools()" disabled>2. List Tools</button>
+            <button id="greetBtn" onclick="callGreetTool()" disabled>3. Call Greet Tool</button>
+            <button id="endBtn" onclick="endSession()" disabled>4. End Session</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+        
+        <div class="log" id="log">Ready to connect to MCP server at http://localhost:3000/mcp
+
+Make sure your server is running with: bun run index.ts
+        </div>
+        
+        <div id="uiContainer"></div>
+    </div>
+
+    <script>
+        const MCP_ENDPOINT = 'http://localhost:3000/mcp';
+        let sessionId = null;
+        let logElement = document.getElementById('log');
+        let statusElement = document.getElementById('status');
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+        
+        function clearLog() {
+            logElement.textContent = 'Log cleared.\n';
+        }
+        
+        function updateStatus(connected, sessionIdStr = '') {
+            if (connected) {
+                statusElement.className = 'status connected';
+                statusElement.textContent = `Status: Connected (Session: ${sessionIdStr})`;
+            } else {
+                statusElement.className = 'status disconnected';
+                statusElement.textContent = 'Status: Disconnected';
+            }
+        }
+        
+        function updateButtons() {
+            const connected = sessionId !== null;
+            document.getElementById('initBtn').disabled = connected;
+            document.getElementById('listBtn').disabled = !connected;
+            document.getElementById('greetBtn').disabled = !connected;
+            document.getElementById('endBtn').disabled = !connected;
+        }
+        
+        async function initializeSession() {
+            log('🔄 Initializing MCP session...');
+            
+            const initRequest = {
+                jsonrpc: "2.0",
+                id: 1,
+                method: "initialize",
+                params: {
+                    protocolVersion: "2024-11-05",
+                    capabilities: {
+                        tools: {}
+                    },
+                    clientInfo: {
+                        name: "browser-client",
+                        version: "1.0.0"
+                    }
+                }
+            };
+
+            try {
+                const response = await fetch(MCP_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(initRequest)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                sessionId = response.headers.get('Mcp-Session-Id');
+                const data = await response.json();
+                
+                log(`✅ Session initialized successfully!`);
+                log(`📝 Session ID: ${sessionId}`);
+                log(`📋 Server response: ${JSON.stringify(data, null, 2)}`);
+                
+                updateStatus(true, sessionId);
+                updateButtons();
+                
+            } catch (error) {
+                log(`❌ Failed to initialize session: ${error.message}`);
+                console.error('Initialization error:', error);
+            }
+        }
+
+        async function listTools() {
+            if (!sessionId) {
+                log('❌ No active session. Initialize first.');
+                return;
+            }
+            
+            log('🔄 Listing available tools...');
+            
+            const listRequest = {
+                jsonrpc: "2.0",
+                id: 2,
+                method: "tools/list"
+            };
+
+            try {
+                const response = await fetch(MCP_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'mcp-session-id': sessionId
+                    },
+                    body: JSON.stringify(listRequest)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                log(`🔧 Available tools: ${JSON.stringify(data, null, 2)}`);
+                
+            } catch (error) {
+                log(`❌ Failed to list tools: ${error.message}`);
+                console.error('List tools error:', error);
+            }
+        }
+
+        async function callGreetTool() {
+            if (!sessionId) {
+                log('❌ No active session. Initialize first.');
+                return;
+            }
+            
+            log('🔄 Calling greet tool...');
+            
+            const callRequest = {
+                jsonrpc: "2.0",
+                id: 3,
+                method: "tools/call",
+                params: {
+                    name: "greet",
+                    arguments: {}
+                }
+            };
+
+            try {
+                const response = await fetch(MCP_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'mcp-session-id': sessionId
+                    },
+                    body: JSON.stringify(callRequest)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                log(`🚀 Greet tool result: ${JSON.stringify(data, null, 2)}`);
+                
+                // Display the UI resource
+                if (data.result && data.result.content) {
+                    displayUIResource(data.result.content[0]);
+                }
+                
+            } catch (error) {
+                log(`❌ Failed to call greet tool: ${error.message}`);
+                console.error('Call tool error:', error);
+            }
+        }
+        
+        function displayUIResource(content) {
+            const uiContainer = document.getElementById('uiContainer');
+            
+            if (content.type === 'text' && content.mimeType === 'application/vnd.mcp-ui+json') {
+                try {
+                    const uiData = JSON.parse(content.text);
+                    
+                    if (uiData.type === 'externalUrl' && uiData.iframeUrl) {
+                        log(`🎨 Displaying UI resource: ${uiData.iframeUrl}`);
+                        
+                        uiContainer.innerHTML = `
+                            <div class="iframe-container">
+                                <h3>UI Resource: ${content.uri}</h3>
+                                <iframe src="${uiData.iframeUrl}" title="MCP UI Resource"></iframe>
+                            </div>
+                        `;
+                    }
+                } catch (parseError) {
+                    log(`❌ Failed to parse UI resource: ${parseError.message}`);
+                }
+            }
+        }
+
+        async function endSession() {
+            if (!sessionId) {
+                log('❌ No active session to end.');
+                return;
+            }
+            
+            log('🔄 Ending session...');
+            
+            try {
+                const response = await fetch(MCP_ENDPOINT, {
+                    method: 'DELETE',
+                    headers: {
+                        'mcp-session-id': sessionId
+                    }
+                });
+
+                if (response.ok) {
+                    log('✅ Session ended successfully');
+                } else {
+                    log(`⚠️ Session end returned status: ${response.status}`);
+                }
+                
+                sessionId = null;
+                updateStatus(false);
+                updateButtons();
+                
+                // Clear UI container
+                document.getElementById('uiContainer').innerHTML = '';
+                
+            } catch (error) {
+                log(`❌ Failed to end session: ${error.message}`);
+                console.error('End session error:', error);
+            }
+        }
+        
+        // Initialize button states
+        updateButtons();
+    </script>
+</body>
+</html>
